@@ -1,10 +1,6 @@
-# virtual environment
 venv/
-
-# Python cache files
 __pycache__/
-*.py[cod]
-*$py.class
-
-#SQlite database
-*.db
+.pytest_cache/
+*.pyc
+.DS_Store
+library.db
