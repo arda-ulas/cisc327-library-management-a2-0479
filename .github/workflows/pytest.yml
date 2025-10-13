@@ -18,3 +18,9 @@ jobs:
           pip install -r requirements.txt
       - name: Run pytest
         run: pytest -q
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          fail_ci_if_error: true
