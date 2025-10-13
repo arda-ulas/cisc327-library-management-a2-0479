@@ -22,7 +22,6 @@ def test_borrow_unavailable_book_blocked(svc, add_and_get_book_id):
     assert ok2 is False
     assert "not available" in msg2.lower() or "unavailable" in msg2.lower()
 
-@pytest.mark.xfail(reason="Spec: block the 6th borrow (max 5). Impl uses '> 5' instead of '>= 5'.")
 def test_borrow_blocks_at_five_active_loans(svc, add_and_get_book_id):
     # Add 6 distinct 1-copy books; attempt 6th borrow should be rejected by spec.
     patron = "555555"

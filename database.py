@@ -19,7 +19,7 @@ def get_db_connection():
 def init_database():
     """Initialize the database with required tables."""
     conn = get_db_connection()
-    
+
     # Create books table
     conn.execute('''
         CREATE TABLE IF NOT EXISTS books (
@@ -31,10 +31,10 @@ def init_database():
             available_copies INTEGER NOT NULL
         )
     ''')
-    
-    # Create borrow_records table
+
+    # Create borrows table
     conn.execute('''
-        CREATE TABLE IF NOT EXISTS borrow_records (
+        CREATE TABLE IF NOT EXISTS borrows (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             patron_id TEXT NOT NULL,
             book_id INTEGER NOT NULL,
@@ -44,7 +44,7 @@ def init_database():
             FOREIGN KEY (book_id) REFERENCES books (id)
         )
     ''')
-    
+
     conn.commit()
     conn.close()
 
@@ -69,7 +69,7 @@ def add_sample_data():
         
         # Make 1984 unavailable by adding a borrow record
         conn.execute('''
-            INSERT INTO borrow_records (patron_id, book_id, borrow_date, due_date)
+            INSERT INTO borrows (patron_id, book_id, borrow_date, due_date)
             VALUES (?, ?, ?, ?)
         ''', ('123456', 3, 
               (datetime.now() - timedelta(days=5)).isoformat(),
@@ -110,13 +110,13 @@ def get_patron_borrowed_books(patron_id: str) -> List[Dict]:
     conn = get_db_connection()
     records = conn.execute('''
         SELECT br.*, b.title, b.author 
-        FROM borrow_records br 
+        FROM borrows br 
         JOIN books b ON br.book_id = b.id 
         WHERE br.patron_id = ? AND br.return_date IS NULL
         ORDER BY br.borrow_date
     ''', (patron_id,)).fetchall()
     conn.close()
-    
+
     borrowed_books = []
     for record in records:
         borrowed_books.append({
@@ -127,14 +127,14 @@ def get_patron_borrowed_books(patron_id: str) -> List[Dict]:
             'due_date': datetime.fromisoformat(record['due_date']),
             'is_overdue': datetime.now() > datetime.fromisoformat(record['due_date'])
         })
-    
+
     return borrowed_books
 
 def get_patron_borrow_count(patron_id: str) -> int:
     """Get the number of books currently borrowed by a patron."""
     conn = get_db_connection()
     count = conn.execute('''
-        SELECT COUNT(*) as count FROM borrow_records 
+        SELECT COUNT(*) as count FROM borrows 
         WHERE patron_id = ? AND return_date IS NULL
     ''', (patron_id,)).fetchone()['count']
     conn.close()
@@ -160,8 +160,8 @@ def insert_borrow_record(patron_id: str, book_id: int, borrow_date: datetime, du
     conn = get_db_connection()
     try:
         conn.execute('''
-            INSERT INTO borrow_records (patron_id, book_id, borrow_date, due_date)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO borrows (patron_id, book_id, borrow_date, due_date, return_date)
+            VALUES (?, ?, ?, ?, NULL)
         ''', (patron_id, book_id, borrow_date.isoformat(), due_date.isoformat()))
         conn.commit()
         conn.close()
@@ -188,14 +188,17 @@ def update_borrow_record_return_date(patron_id: str, book_id: int, return_date: 
     """Update the return date for a borrow record."""
     conn = get_db_connection()
     try:
-        conn.execute('''
-            UPDATE borrow_records 
-            SET return_date = ? 
-            WHERE patron_id = ? AND book_id = ? AND return_date IS NULL
+        cur = conn.execute('''
+            UPDATE borrows
+               SET return_date = ?
+             WHERE patron_id = ?
+               AND book_id = ?
+               AND return_date IS NULL
         ''', (return_date.isoformat(), patron_id, book_id))
         conn.commit()
+        rowcount = cur.rowcount
         conn.close()
-        return True
+        return rowcount > 0   # success only if we actually updated a row
     except Exception as e:
         conn.close()
         return False

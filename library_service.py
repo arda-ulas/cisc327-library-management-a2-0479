@@ -15,44 +15,41 @@ def add_book_to_catalog(title: str, author: str, isbn: str, total_copies: int) -
     """
     Add a new book to the catalog.
     Implements R1: Book Catalog Management
-    
-    Args:
-        title: Book title (max 200 chars)
-        author: Book author (max 100 chars)
-        isbn: 13-digit ISBN
-        total_copies: Number of copies (positive integer)
-        
-    Returns:
-        tuple: (success: bool, message: str)
     """
-    # Input validation
-    if not title or not title.strip():
+    # Normalize/trim
+    title = (title or "").strip()
+    author = (author or "").strip()
+    isbn = (isbn or "").strip()
+
+    # Title
+    if not title:
         return False, "Title is required."
-    
-    if len(title.strip()) > 200:
+    if len(title) > 200:
         return False, "Title must be less than 200 characters."
-    
-    if not author or not author.strip():
+
+    # Author
+    if not author:
         return False, "Author is required."
-    
-    if len(author.strip()) > 100:
+    if len(author) > 100:
         return False, "Author must be less than 100 characters."
-    
-    if len(isbn) != 13:
+
+    # ISBN: exactly 13 digits (not just length)
+    if len(isbn) != 13 or not isbn.isdigit():
         return False, "ISBN must be exactly 13 digits."
-    
+
+    # total_copies: positive integer
     if not isinstance(total_copies, int) or total_copies <= 0:
         return False, "Total copies must be a positive integer."
-    
-    # Check for duplicate ISBN
+
+    # Duplicate ISBN
     existing = get_book_by_isbn(isbn)
     if existing:
         return False, "A book with this ISBN already exists."
-    
-    # Insert new book
-    success = insert_book(title.strip(), author.strip(), isbn, total_copies, total_copies)
+
+    # Insert (available_copies starts equal to total_copies)
+    success = insert_book(title, author, isbn, total_copies, total_copies)
     if success:
-        return True, f'Book "{title.strip()}" has been successfully added to the catalog.'
+        return True, f'Book "{title}" has been successfully added to the catalog.'
     else:
         return False, "Database error occurred while adding the book."
 
@@ -83,7 +80,7 @@ def borrow_book_by_patron(patron_id: str, book_id: int) -> Tuple[bool, str]:
     # Check patron's current borrowed books count
     current_borrowed = get_patron_borrow_count(patron_id)
     
-    if current_borrowed > 5:
+    if current_borrowed >= 5:
         return False, "You have reached the maximum borrowing limit of 5 books."
     
     # Create borrow record
@@ -103,11 +100,38 @@ def borrow_book_by_patron(patron_id: str, book_id: int) -> Tuple[bool, str]:
 
 def return_book_by_patron(patron_id: str, book_id: int) -> Tuple[bool, str]:
     """
-    Process book return by a patron.
-    
-    TODO: Implement R4 as per requirements
+    R4 — Process book return by a patron.
+
+    Rules:
+    - Patron ID must be exactly 6 digits.
+    - There must be an active borrow (return_date IS NULL) for (patron_id, book_id).
+    - On success: set return_date = now, increment available_copies.
     """
-    return False, "Book return functionality is not yet implemented."
+    # Validate patron
+    if not patron_id or not patron_id.isdigit() or len(patron_id) != 6:
+        return False, "Invalid patron ID. Must be exactly 6 digits."
+
+    # Validate book and existence
+    try:
+        book_id = int(book_id)
+    except Exception:
+        return False, "Invalid book id."
+    book = get_book_by_id(book_id)
+    if not book:
+        return False, "Book not found."
+
+    # Try to set return_date on an active borrow for this patron/book
+    now = datetime.now()
+    updated = update_borrow_record_return_date(patron_id, book_id, now)
+    if not updated:
+        # No active borrow row for this patron & book
+        return False, "No active borrow for this patron and book."
+
+    # Increment availability
+    if not update_book_availability(book_id, +1):
+        return False, "Database error occurred while updating availability."
+
+    return True, f'Returned "{book["title"]}".'
 
 def calculate_late_fee_for_book(patron_id: str, book_id: int) -> Dict:
     """

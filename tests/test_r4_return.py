@@ -7,7 +7,6 @@ Expectations:
 import pytest
 import sqlite3
 
-@pytest.mark.xfail(reason="R4 not implemented yet: return flow and DB updates.")
 def test_return_happy_path_updates_availability_and_sets_return_date(
     svc, add_and_get_book_id, db_path
 ):
@@ -32,7 +31,6 @@ def test_return_happy_path_updates_availability_and_sets_return_date(
         ).fetchone()
         assert loan and loan["return_date"] is not None
 
-@pytest.mark.xfail(reason="R4 not implemented: should reject returns for non-borrower.")
 def test_return_rejects_if_not_borrowed_by_patron(svc, add_and_get_book_id):
     book_id = add_and_get_book_id("Design Patterns", "Gamma", "9780201633610", 1)
     ok, _ = svc.borrow_book_by_patron("111111", book_id)
