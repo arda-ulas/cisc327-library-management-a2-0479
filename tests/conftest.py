@@ -1,6 +1,6 @@
 import sys
 import pathlib
-ROOT = pathlib.Path(__file__).resolve().parents[1]  # repo root (CISC327-CMPE327-F25)
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -43,8 +43,11 @@ def db_path(app_and_db):
     return path
 
 @pytest.fixture
-def svc():
-    """Business-logic surface under test (R1, R3 today)."""
+def svc(app_and_db):
+    """
+    Business-logic surface under test.
+    IMPORTANT: depend on app_and_db so the temp DB + schema exist in CI.
+    """
     return importlib.import_module("library_service")
 
 # --- Small helpers for tests that need a book_id -----------------------------
