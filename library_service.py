@@ -6,6 +6,7 @@ Contains all the core business logic for the Library Management System
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from database import (
+    get_db_connection,
     get_book_by_id, get_book_by_isbn, get_patron_borrow_count,
     insert_book, insert_borrow_record, update_book_availability,
     update_borrow_record_return_date, get_all_books
@@ -135,17 +136,69 @@ def return_book_by_patron(patron_id: str, book_id: int) -> Tuple[bool, str]:
 
 def calculate_late_fee_for_book(patron_id: str, book_id: int) -> Dict:
     """
-    Calculate late fees for a specific book.
-    
-    TODO: Implement R5 as per requirements 
-    
-    
-    return { // return the calculated values
-        'fee_amount': 0.00,
-        'days_overdue': 0,
-        'status': 'Late fee calculation not implemented'
-    }
+    R5 — Calculate late fees for a specific active loan of (patron_id, book_id).
+
+    Rules from spec:
+    - Loans are due in 14 days (already enforced on borrow).
+    - If overdue:
+        * Days 1–7 overdue: $0.50/day
+        * Day 8+ overdue: $1.00/day
+        * Total fee capped at $15.00
+    Return:
+        {
+            'fee_amount': float,   # dollars
+            'days_overdue': int,
+            'status': 'on_time' | 'late' | 'no_active_loan'
+        }
     """
+    if not patron_id or not patron_id.isdigit() or len(patron_id) != 6:
+        return {'fee_amount': 0.0, 'days_overdue': 0, 'status': 'no_active_loan'}
+
+    try:
+        book_id = int(book_id)
+    except Exception:
+        return {'fee_amount': 0.0, 'days_overdue': 0, 'status': 'no_active_loan'}
+
+    # Find the active (unreturned) borrow for this patron/book
+    conn = get_db_connection()
+    row = conn.execute(
+        """
+        SELECT id, due_date
+          FROM borrows
+         WHERE patron_id = ? AND book_id = ? AND return_date IS NULL
+         ORDER BY id DESC
+         LIMIT 1
+        """,
+        (patron_id, book_id),
+    ).fetchone()
+    conn.close()
+
+    if not row:
+        return {'fee_amount': 0.0, 'days_overdue': 0, 'status': 'no_active_loan'}
+
+    # Compute overdue days (based on local date difference)
+    try:
+        due_dt = datetime.fromisoformat(row["due_date"])
+    except Exception:
+        # If stored format is unexpected, be safe: no fee
+        return {'fee_amount': 0.0, 'days_overdue': 0, 'status': 'no_active_loan'}
+
+    today = datetime.now()
+    days_overdue = max(0, (today.date() - due_dt.date()).days)
+
+    if days_overdue == 0:
+        return {'fee_amount': 0.0, 'days_overdue': 0, 'status': 'on_time'}
+
+    # Tiered fee with cap
+    tier1_days = min(days_overdue, 7)
+    tier2_days = max(days_overdue - 7, 0)
+    fee = tier1_days * 0.50 + tier2_days * 1.00
+    fee_capped = min(15.00, fee)
+
+    # Round to 2 decimals for presentation
+    fee_capped = round(fee_capped + 1e-9, 2)
+
+    return {'fee_amount': fee_capped, 'days_overdue': days_overdue, 'status': 'late'}
 
 def search_books_in_catalog(search_term: str, search_type: str) -> List[Dict]:
     """
