@@ -130,6 +130,36 @@ def get_patron_borrowed_books(patron_id: str) -> List[Dict]:
 
     return borrowed_books
 
+def get_borrow_history_for_patron(patron_id: str) -> List[Dict]:
+    """
+    Full borrowing history (returned and active) for a patron.
+    Returns newest first. Dates are returned as Python datetime objects.
+    """
+    conn = get_db_connection()
+    rows = conn.execute(
+        """
+        SELECT br.*, b.title, b.author
+          FROM borrows br
+          JOIN books b ON b.id = br.book_id
+         WHERE br.patron_id = ?
+         ORDER BY br.borrow_date DESC
+        """,
+        (patron_id,),
+    ).fetchall()
+    conn.close()
+
+    history: List[Dict] = []
+    for r in rows:
+        history.append({
+            "book_id": r["book_id"],
+            "title": r["title"],
+            "author": r["author"],
+            "borrow_date": datetime.fromisoformat(r["borrow_date"]),
+            "due_date": datetime.fromisoformat(r["due_date"]),
+            "return_date": datetime.fromisoformat(r["return_date"]) if r["return_date"] else None,
+        })
+    return history
+
 def get_patron_borrow_count(patron_id: str) -> int:
     """Get the number of books currently borrowed by a patron."""
     conn = get_db_connection()

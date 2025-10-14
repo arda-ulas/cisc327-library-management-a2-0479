@@ -9,7 +9,8 @@ from database import (
     get_db_connection,
     get_book_by_id, get_book_by_isbn, get_patron_borrow_count,
     insert_book, insert_borrow_record, update_book_availability,
-    update_borrow_record_return_date, get_all_books
+    update_borrow_record_return_date, get_all_books,
+    get_patron_borrowed_books, get_borrow_history_for_patron
 )
 
 def add_book_to_catalog(title: str, author: str, isbn: str, total_copies: int) -> Tuple[bool, str]:
@@ -57,46 +58,46 @@ def add_book_to_catalog(title: str, author: str, isbn: str, total_copies: int) -
 def borrow_book_by_patron(patron_id: str, book_id: int) -> Tuple[bool, str]:
     """
     Allow a patron to borrow a book.
-    Implements R3 as per requirements  
-    
+    Implements R3 as per requirements
+
     Args:
         patron_id: 6-digit library card ID
         book_id: ID of the book to borrow
-        
+
     Returns:
         tuple: (success: bool, message: str)
     """
     # Validate patron ID
     if not patron_id or not patron_id.isdigit() or len(patron_id) != 6:
         return False, "Invalid patron ID. Must be exactly 6 digits."
-    
+
     # Check if book exists and is available
     book = get_book_by_id(book_id)
     if not book:
         return False, "Book not found."
-    
+
     if book['available_copies'] <= 0:
         return False, "This book is currently not available."
-    
+
     # Check patron's current borrowed books count
     current_borrowed = get_patron_borrow_count(patron_id)
-    
+
     if current_borrowed >= 5:
         return False, "You have reached the maximum borrowing limit of 5 books."
-    
+
     # Create borrow record
     borrow_date = datetime.now()
     due_date = borrow_date + timedelta(days=14)
-    
+
     # Insert borrow record and update availability
     borrow_success = insert_borrow_record(patron_id, book_id, borrow_date, due_date)
     if not borrow_success:
         return False, "Database error occurred while creating borrow record."
-    
+
     availability_success = update_book_availability(book_id, -1)
     if not availability_success:
         return False, "Database error occurred while updating book availability."
-    
+
     return True, f'Successfully borrowed "{book["title"]}". Due date: {due_date.strftime("%Y-%m-%d")}.'
 
 def return_book_by_patron(patron_id: str, book_id: int) -> Tuple[bool, str]:
@@ -228,8 +229,63 @@ def search_books_in_catalog(search_term: str, search_type: str) -> List[Dict]:
 
 def get_patron_status_report(patron_id: str) -> Dict:
     """
-    Get status report for a patron.
-    
-    TODO: Implement R7 as per requirements
+    R7 — Patron Status Report.
+
+    Returns a dict with:
+      - patron_id
+      - current_loans: list of {book_id, title, author, borrow_date, due_date, days_overdue, late_fee}
+      - counts: {"currently_borrowed": int, "history_total": int}
+      - total_late_fees: float (sum for active loans)
+      - history: list of {book_id, title, author, borrow_date, due_date, return_date}
+
+    Notes:
+      * Reuses R5 fee calculation per active loan.
+      * Patron ID must be exactly 6 digits.
     """
-    return {}
+    pid = (patron_id or "").strip()
+    if not pid.isdigit() or len(pid) != 6:
+        return {
+            "patron_id": patron_id,
+            "current_loans": [],
+            "counts": {"currently_borrowed": 0, "history_total": 0},
+            "total_late_fees": 0.0,
+            "history": [],
+            "error": "Invalid patron ID. Must be exactly 6 digits.",
+        }
+
+    # Active borrows (no return_date)
+    active = get_patron_borrowed_books(pid)  # returns borrow_date, due_date, title/author, is_overdue
+    current_loans: List[Dict] = []
+    total_fees = 0.0
+
+    for rec in active:
+        fee_info = calculate_late_fee_for_book(pid, rec["book_id"])
+        fee_amt = float(fee_info.get("fee_amount", 0.0))
+        total_fees += fee_amt
+
+        days_overdue = max(0, (datetime.now().date() - rec["due_date"].date()).days)
+
+        current_loans.append({
+            "book_id": rec["book_id"],
+            "title": rec["title"],
+            "author": rec["author"],
+            "borrow_date": rec["borrow_date"],
+            "due_date": rec["due_date"],
+            "days_overdue": days_overdue,
+            "late_fee": round(fee_amt, 2),
+        })
+
+    # Full history (returned + active)
+    history = get_borrow_history_for_patron(pid)
+    counts = {
+        "currently_borrowed": len(current_loans),
+        "history_total": len(history),
+    }
+
+    return {
+        "patron_id": pid,
+        "current_loans": current_loans,
+        "counts": counts,
+        "total_late_fees": round(total_fees, 2),
+        "history": history,
+    }
