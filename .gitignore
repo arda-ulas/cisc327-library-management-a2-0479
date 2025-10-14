@@ -1,9 +1,25 @@
+# Virtual environments
 venv/
+env/
+ENV/
+venv.bak/
+env.bak/
+
+# Python cache / build artifacts
 __pycache__/
+*.py[cod]
+*$py.class
 .pytest_cache/
-*.pyc
-.DS_Store
-library.db
+
+# Coverage artifacts
 .coverage
-htmlcov/
 coverage.xml
+htmlcov/
+
+# SQLite databases
+*.db
+
+# OS
+.DS_Store
+.idea/
+.vscode/
