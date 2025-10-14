@@ -1,5 +1,6 @@
 # Library Management System - Flask Web Application with SQLite
 [![Python tests](https://github.com/arda-ulas/cisc327-library-management-a2-0479/actions/workflows/pytest.yml/badge.svg)](https://github.com/arda-ulas/cisc327-library-management-a2-0479/actions/workflows/pytest.yml)
+[![codecov](https://codecov.io/gh/arda-ulas/cisc327-library-management-a2-0479/branch/main/graph/badge.svg)](https://codecov.io/gh/arda-ulas/cisc327-library-management-a2-0479)
 
 ## Overview
 
