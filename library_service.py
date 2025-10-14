@@ -180,7 +180,7 @@ def calculate_late_fee_for_book(patron_id: str, book_id: int) -> Dict:
     try:
         due_dt = datetime.fromisoformat(row["due_date"])
     except Exception:
-        # If stored format is unexpected, be safe: no fee
+        # If stored format is unexpected, no fee
         return {'fee_amount': 0.0, 'days_overdue': 0, 'status': 'no_active_loan'}
 
     today = datetime.now()
@@ -202,12 +202,29 @@ def calculate_late_fee_for_book(patron_id: str, book_id: int) -> Dict:
 
 def search_books_in_catalog(search_term: str, search_type: str) -> List[Dict]:
     """
-    Search for books in the catalog.
-    
-    TODO: Implement R6 as per requirements
+    R6 — Search for books.
+    - title/author: partial, case-insensitive
+    - isbn: exact match (13-digit)
+    Returns list of book dicts in the same shape as get_all_books().
     """
-    
-    return []
+    term = (search_term or "").strip()
+    stype = (search_type or "").strip().lower()
+
+    if not term or stype not in {"title", "author", "isbn"}:
+        return []
+
+    books = get_all_books()
+
+    if stype == "isbn":
+        # exact match
+        return [b for b in books if b.get("isbn") == term]
+
+    # partial, case-insensitive for title/author
+    term_l = term.lower()
+    if stype == "title":
+        return [b for b in books if term_l in (b.get("title") or "").lower()]
+    else:  # author
+        return [b for b in books if term_l in (b.get("author") or "").lower()]
 
 def get_patron_status_report(patron_id: str) -> Dict:
     """
